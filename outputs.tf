@@ -18,6 +18,26 @@ output "workload_subnet_id" {
   value       = azurerm_subnet.workload.id
 }
 
+output "servicebus_namespace_name" {
+  description = "Name of the Azure Service Bus namespace"
+  value       = azurerm_servicebus_namespace.demo.name
+}
+
+output "servicebus_namespace_id" {
+  description = "Resource ID of the Azure Service Bus namespace"
+  value       = azurerm_servicebus_namespace.demo.id
+}
+
+output "servicebus_queue_name" {
+  description = "Name of the workload message queue"
+  value       = azurerm_servicebus_queue.work_items.name
+}
+
+output "servicebus_queue_id" {
+  description = "Resource ID of the workload message queue"
+  value       = azurerm_servicebus_queue.work_items.id
+}
+
 output "private_endpoints_subnet_id" {
   description = "Resource ID of the private endpoints subnet"
   value       = azurerm_subnet.private_endpoints.id

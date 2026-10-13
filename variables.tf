@@ -9,3 +9,9 @@ variable "key_vault_name" {
   type        = string
   default     = "kv-tf-infra-c7c86f"
 }
+
+variable "servicebus_namespace_name" {
+  description = "Globally unique Azure Service Bus namespace name"
+  type        = string
+  default     = "sb-tf-infra-c7c86f"
+}
