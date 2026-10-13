@@ -27,3 +27,28 @@ output "network_security_group_name" {
   description = "Name of the workload network security group"
   value       = azurerm_network_security_group.workload.name
 }
+
+output "key_vault_name" {
+  description = "Name of the project's Azure Key Vault"
+  value       = azurerm_key_vault.demo.name
+}
+
+output "key_vault_uri" {
+  description = "URI of the project's Azure Key Vault"
+  value       = azurerm_key_vault.demo.vault_uri
+}
+
+output "workload_managed_identity_name" {
+  description = "Name of the workload user-assigned managed identity"
+  value       = azurerm_user_assigned_identity.workload.name
+}
+
+output "workload_managed_identity_client_id" {
+  description = "Client ID of the workload user-assigned managed identity"
+  value       = azurerm_user_assigned_identity.workload.client_id
+}
+
+output "workload_managed_identity_principal_id" {
+  description = "Principal ID used for Azure RBAC assignments"
+  value       = azurerm_user_assigned_identity.workload.principal_id
+}
