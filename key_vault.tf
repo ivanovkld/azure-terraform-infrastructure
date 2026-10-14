@@ -13,7 +13,7 @@ resource "azurerm_key_vault" "demo" {
   soft_delete_retention_days = 7
   purge_protection_enabled   = true
 
-  public_network_access_enabled = true
+  public_network_access_enabled = false
 
   tags = local.common_tags
 }

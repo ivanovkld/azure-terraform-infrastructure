@@ -72,3 +72,13 @@ output "workload_managed_identity_principal_id" {
   description = "Principal ID used for Azure RBAC assignments"
   value       = azurerm_user_assigned_identity.workload.principal_id
 }
+
+output "key_vault_private_endpoint_id" {
+  description = "Resource ID of the Key Vault private endpoint"
+  value       = azurerm_private_endpoint.key_vault.id
+}
+
+output "key_vault_private_dns_zone_name" {
+  description = "Private DNS zone used by Key Vault"
+  value       = azurerm_private_dns_zone.key_vault.name
+}
