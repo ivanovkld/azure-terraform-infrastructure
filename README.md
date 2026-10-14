@@ -2,25 +2,25 @@
 
 A hands-on Azure infrastructure portfolio project built with Terraform, Microsoft Azure, Microsoft Entra ID, Azure RBAC, and GitHub Actions.
 
-The project demonstrates infrastructure-as-code, remote Terraform state, workload identity, least-privilege authorization, private networking, and automated infrastructure validation.
+The project demonstrates infrastructure-as-code, remote Terraform state management, workload identity, least-privilege authorization, private networking, and automated infrastructure validation.
 
-This is a personal hands-on learning project, not a claim of commercial production experience with Terraform.
+This is a personal learning project. It demonstrates hands-on implementation and does not represent commercial production experience with Terraform.
 
 ## Project status
 
 Implemented:
 
-- Separate Terraform bootstrap configuration for the remote state backend
-- Azure Blob Storage remote state
-- GitHub Actions authentication to Azure through Microsoft Entra ID OpenID Connect (OIDC)
+- Terraform bootstrap configuration for remote state storage
+- Azure Blob Storage remote backend
+- GitHub Actions authentication through Microsoft Entra ID OpenID Connect (OIDC)
 - Automated Terraform formatting checks, validation, and planning
 - Azure Virtual Network, subnets, and Network Security Group
 - Azure Key Vault with RBAC authorization and private connectivity
 - User-assigned Managed Identity and least-privilege RBAC assignments
 - Azure Service Bus Standard namespace and message queue
 - Queue-scoped Service Bus Sender and Receiver roles
-- Temporary private-connectivity validation VM with no public IP
-- Evidence of Key Vault access through Private Endpoint and Managed Identity
+- Private Endpoint and Private DNS validation using a temporary Linux VM
+- Evidence of successful Key Vault access through private networking and Managed Identity
 
 ## Architecture
 
@@ -33,11 +33,11 @@ The bootstrap configuration creates the resources required by the main Terraform
 - Blob container: `tfstate`
 - Main state blob: `azure-terraform-infrastructure.tfstate`
 
-The bootstrap configuration is kept separate because the remote state storage must exist before the main Terraform backend can use it.
+The bootstrap configuration is separate because the remote state storage must exist before the main Terraform configuration can use it.
 
-Bootstrap state is stored locally in the `bootstrap` directory and excluded from version control. The main Terraform state is stored in Azure Blob Storage.
+The bootstrap Terraform state is stored locally in the `bootstrap` directory and excluded from Git. The main Terraform configuration stores its state in Azure Blob Storage.
 
-The state container is private and accessed using Microsoft Entra ID and Azure RBAC. No Storage Account access key is stored in the repository.
+The state container is private. Terraform accesses it using Microsoft Entra ID and Azure RBAC rather than a Storage Account access key stored in the repository.
 
 ### Network foundation
 
@@ -50,9 +50,9 @@ The state container is private and accessed using Microsoft Entra ID and Azure R
 |---|---|---|
 | `snet-workload` | `10.20.1.0/24` | Workload resources and validation VM |
 | `snet-private-endpoints` | `10.20.2.0/24` | Private Endpoint network interfaces |
-| `nsg-workload` | Explicit inbound Internet deny rule | Network security for the workload subnet |
+| `nsg-workload` | Inbound Internet deny rule | Network security for the workload subnet |
 
-The workload subnet is associated with `nsg-workload`. Azure's default inbound deny rule also remains in effect.
+The workload subnet is associated with `nsg-workload`. The NSG explicitly denies inbound traffic from the public Internet; Azure's default inbound deny rule also remains in effect.
 
 ### Key Vault and private networking
 
@@ -74,7 +74,7 @@ A validation test from a VM in the VNet confirmed private DNS resolution, Manage
 - Key Vault role: `Key Vault Secrets User`
 - Key Vault role scope: the individual Key Vault
 
-The workload identity can read secrets from this Key Vault without using a stored client secret. No secret values were provisioned as part of this project stage.
+The workload identity can read secrets from this Key Vault without storing a client secret. No secret values were provisioned as part of this project.
 
 ### Azure Service Bus
 
@@ -84,14 +84,16 @@ The workload identity can read secrets from this Key Vault without using a store
 - Local SAS authentication: disabled
 - Minimum TLS version: 1.2
 
-The workload Managed Identity has the following queue-scoped roles:
+The workload Managed Identity has the following roles, scoped to the queue:
 
 - `Azure Service Bus Data Sender`
 - `Azure Service Bus Data Receiver`
 
-These assignments allow message sending and receiving at the queue scope rather than granting data-plane access across the whole subscription.
+These assignments allow the identity to send and receive messages at the queue scope rather than granting data-plane access across the entire subscription.
 
-Service Bus public network access remains enabled as a lab simplification. Private Link for Service Bus is not implemented in this Standard-tier stage.
+The project implements the Service Bus namespace, queue, and authorization. It does not include a separate business application that sends and receives production messages.
+
+Service Bus public network access remains enabled as a lab simplification.
 
 ### Private connectivity validation VM
 
@@ -101,71 +103,88 @@ Service Bus public network access remains enabled as a lab simplification. Priva
 - Public IP: none
 - Managed Identity: `id-terraform-demo-workload`
 
-The VM was used to verify private DNS resolution and access to Key Vault through Managed Identity. It is retained temporarily for portfolio evidence while the lab subscription remains available.
+The VM was used to verify private DNS resolution and access to Key Vault through Managed Identity. It is retained temporarily for evidence collection while the lab subscription remains available.
 
-The workload subnet currently has default outbound access enabled for the VM management and validation scenario. This is a lab limitation rather than a recommended long-term production configuration. The VM incurs Azure compute and disk charges while its resources remain allocated.
+The workload subnet currently has default outbound access enabled to support the lab validation and VM management workflow. This is a lab limitation rather than a recommended long-term production configuration.
 
 The repository contains only the public SSH key used by the VM configuration. No private SSH key is committed.
 
+## Terraform design
+
+The root Terraform configuration manages the main Azure infrastructure and uses an Azure Blob Storage remote backend.
+
+The bootstrap configuration is maintained separately because it creates the storage resources required by the main backend.
+
+Terraform configuration is declarative: the `.tf` files describe the desired infrastructure, and Terraform compares this configuration with the current state to produce a plan. Applying an approved plan creates, updates, or deletes Azure resources as necessary.
+
+The `.terraform.lock.hcl` files are committed to support consistent provider selection.
+
 ## GitHub Actions and OIDC
 
-The `Terraform CI` workflow runs on pushes to the `main` branch and can also be triggered manually.
+The `Terraform CI` workflow runs when changes are pushed to the `main` branch and can also be triggered manually.
 
-It performs:
+The workflow performs:
 
 1. Repository checkout
-2. Azure login through OpenID Connect
+2. Azure authentication through OIDC
 3. Terraform setup
 4. Terraform formatting check
 5. Terraform initialization
 6. Terraform validation
 7. Terraform plan
 
-The Microsoft Entra federated identity is associated with this repository and branch. GitHub Secrets provide the Client ID, Tenant ID, and Subscription ID. No long-lived client secret or Storage Account access key is stored in GitHub.
+GitHub Actions runs Terraform in a separate, temporary runner environment rather than relying on the local development computer.
 
-The GitHub Actions identity has read access to Azure resources for planning and `Storage Blob Data Contributor` access to the Terraform state container.
+The Microsoft Entra federated identity is associated with this repository and branch. GitHub Secrets provide the Client ID, Tenant ID, and Subscription ID required for authentication. No long-lived client secret or Storage Account access key is stored in GitHub.
 
-The workflow does not run `terraform apply`. Infrastructure changes are applied locally after reviewing the plan.
+The GitHub Actions identity has:
+- `Reader` access to the Azure subscription for infrastructure planning
+- `Storage Blob Data Contributor` access to the Terraform state container
+
+The workflow does not run `terraform apply`. Infrastructure changes are applied locally after reviewing the Terraform plan.
+
+This CI workflow demonstrates automated infrastructure validation. It is not a complete corporate change-approval pipeline: mandatory pull request reviews and production deployment approvals are not configured in this lab.
 
 ## Security considerations
 
 - Azure RBAC protects access to the Terraform state container.
 - Anonymous public blob access is disabled.
-- The Storage Account is configured to require TLS 1.2 or later.
+- The Terraform bootstrap configuration specifies TLS 1.2 for the state Storage Account.
 - Public network access to the state Storage Account remains enabled for this lab.
 - Key Vault public network access is disabled and private connectivity is provided through Private Endpoint.
 - Key Vault uses Azure RBAC, soft delete, and purge protection.
 - The workload NSG explicitly denies inbound Internet traffic.
 - The validation VM has no public IP.
-- The validation VM's subnet currently has default outbound access enabled for lab diagnostics.
-- Service Bus local SAS authentication is disabled; its public network access remains enabled.
+- Default outbound access remains enabled for the workload subnet as a lab limitation.
+- Service Bus local SAS authentication is disabled, while public network access remains enabled.
 - GitHub-to-Azure authentication uses OIDC rather than a long-lived client secret.
 - The GitHub Actions identity cannot apply infrastructure changes.
 
-For a production implementation, review private connectivity and egress controls for all relevant resources, restrict public network access where applicable, and evaluate operational monitoring, recovery requirements, and resource costs.
+A production implementation should review outbound network controls, private connectivity, monitoring, recovery requirements, change approvals, and resource costs.
 
 ## Evidence and screenshots
 
-Screenshots are stored in `docs/screenshots/`. They preserve evidence of the deployed architecture and successful validation independently of the Azure subscription.
+Screenshots are stored in `docs/screenshots/`. They preserve evidence of the deployed architecture and successful checks independently of the Azure subscription.
 
 | Screenshot | Evidence |
 |---|---|
-| [Remote state storage](docs/screenshots/01-remote-state-storage.png) | Storage Account and Terraform state blob listing |
-| [VNet and subnets](docs/screenshots/02-vnet-subnets.png) | VNet address space and subnet ranges |
-| [Network security group](docs/screenshots/03-nsg-inbound-rule.png) | Explicit inbound Internet deny rule |
-| [Key Vault networking](docs/screenshots/04-key-vault-private-networking.png) | Public network access disabled |
-| [Private Endpoint](docs/screenshots/05-private-endpoint-approved.png) | Successful provisioning and approved connection |
-| [Private DNS record](docs/screenshots/06-private-dns-record.png) | Key Vault private A record |
-| [Managed Identity](docs/screenshots/07-managed-identity-overview.png) | User-assigned workload identity |
-| [Key Vault RBAC](docs/screenshots/08-key-vault-rbac.png) | `Key Vault Secrets User` role assignment |
-| [Service Bus namespace and queue](docs/screenshots/09-servicebus-namespace-queue.png) | Standard namespace and work queue |
-| [Service Bus queue RBAC](docs/screenshots/10-servicebus-queue-rbac.png) | Sender and Receiver roles at queue scope |
-| [Validation VM](docs/screenshots/11-test-vm-no-public-ip.png) | VM without a public IP |
-| [Private connectivity test](docs/screenshots/12-private-connectivity-test.png) | DNS, Managed Identity, and HTTP 200 test result |
-| [Terraform plan](docs/screenshots/13-terraform-no-changes.png) | Terraform state matches the configuration |
-| [GitHub Actions](docs/screenshots/14-github-actions-success.png) | Successful CI workflow |
+| [01 — Remote Terraform state](docs/screenshots/01%20%E2%80%94%20Remote%20Terraform%20state.png) | Storage Account and Terraform state blob |
+| [02 — VNet and subnets](docs/screenshots/02%20%E2%80%94%20Vnet%20and%20subnets.png) | VNet address space and subnet ranges |
+| [03 — NSG](docs/screenshots/03%20%E2%80%94%20NSG.png) | Inbound Internet deny rule |
+| [04 — Key Vault Networking](docs/screenshots/04%20%E2%80%94%20Key%20Vault%20Networking.png) | Public network access disabled |
+| [05 — Key Vault Private Endpoint](docs/screenshots/05%20%E2%80%94%20Key%20Vault%20Private%20Endpoint.png) | Private connection information in Key Vault |
+| [06 — Private Endpoint](docs/screenshots/06%20%E2%80%94%20Private%20Endpoint.png) | Private Endpoint resource and connection status |
+| [07 — Private DNS](docs/screenshots/07%20%E2%80%94%20Private%20DNS.png) | Private DNS zone and record |
+| [08 — Key Vault RBAC](docs/screenshots/08%20%E2%80%94%20Key%20Vault%20RBAC.png) | `Key Vault Secrets User` assignment |
+| [09 — Managed Identity](docs/screenshots/09%20%E2%80%94%20Managed%20Identity.png) | User-assigned workload identity |
+| [10 — Service Bus](docs/screenshots/10%20%E2%80%94%20Service%20Bus.png) | Standard namespace and queue |
+| [11 — Service Bus RBAC](docs/screenshots/11%20%E2%80%94%20Service%20Bus%20RBAC.png) | Sender and Receiver assignments |
+| [12 — VM](docs/screenshots/12%20%E2%80%94%20VM.png) | Validation VM without a public IP |
+| [13 — Private Connectivity Test](docs/screenshots/13%20%E2%80%94%20Private%20Connectivity%20Test.png) | DNS resolution, Managed Identity, and HTTP 200 |
+| [14 — Terraform No Changes](docs/screenshots/14%20%E2%80%94%20Terraform%20No%20Changes.png) | Terraform state matches the configuration |
+| [15 — GitHub Actions Success](docs/screenshots/15%20%E2%80%94%20Github%20Actions%20Success.png) | Successful Terraform CI workflow |
 
-Screenshots demonstrate the actual resources and checks completed in the lab. They do not contain access tokens, passwords, private keys, or Terraform state contents.
+Screenshots document the actual checks performed. They do not contain access tokens, passwords, private keys, or Terraform state contents.
 
 ## Repository structure
 
@@ -190,7 +209,6 @@ azure-terraform-infrastructure/
 ├── main.tf
 ├── network.tf
 ├── outputs.tf
-├── private_endpoint.tf
 ├── provider.tf
 ├── service_bus.tf
 ├── test_vm.tf
@@ -209,7 +227,7 @@ Requirements:
 
 - Terraform CLI
 - Azure CLI
-- An Azure subscription
+- Access to an Azure subscription
 - Appropriate Azure permissions for the resources being managed
 
 Authenticate to Azure:
@@ -229,27 +247,27 @@ terraform validate
 terraform plan
 ```
 
-Review the full plan before applying changes. Apply only when the changes are understood and expected:
+Review the plan before applying any changes. Apply only when the proposed changes are understood and expected:
 
 ```powershell
 terraform apply
 ```
 
-The validation VM is enabled by default in the current lab configuration so that Terraform and GitHub Actions agree with the deployed resources. Its public key is read from `assets/azure-terraform-kv-pe-test.pub`.
+The validation VM is enabled by default in the current lab configuration so that local Terraform and GitHub Actions can describe the same deployed infrastructure. Its public key is read from `assets/azure-terraform-kv-pe-test.pub`.
 
 ## Cost and lifecycle
 
-Azure resources can incur charges even when they are not actively used. The current environment includes a Standard_B1s VM, managed disks, a Service Bus Standard namespace, a Private Endpoint, and other resources whose applicable charges depend on the resource type, duration, and usage.
+Azure resources can incur charges while they exist. The current environment includes a Standard_B1s VM, managed disk, Service Bus Standard namespace, Private Endpoint, and other Azure resources.
 
-The resources are being retained temporarily for evidence collection before the original lab subscription becomes unavailable. Review Azure Cost Management and the relevant pricing information before extending the environment or recreating it in another subscription.
+The resources are retained temporarily for evidence collection before the original lab subscription becomes unavailable. Review Azure Cost Management and applicable pricing before extending the environment or recreating it in another subscription.
 
 ## Recovery and portability
 
-The GitHub repository preserves the Terraform source code, workflow, public test key, and evidence independently of the original subscription.
+GitHub preserves the Terraform source code, workflow definitions, public test key, and evidence independently of the original subscription.
 
-If the original subscription becomes unavailable, deployment into another subscription requires a valid target subscription, a usable state backend, appropriate permissions, and a deliberate backend configuration. Azure resources and Terraform state do not automatically transfer to another subscription.
+If the original subscription becomes unavailable, deployment into another subscription requires a valid target subscription, a usable state backend, appropriate permissions, and a deliberate backend configuration. Azure resources and Terraform state do not automatically transfer to a different subscription.
 
-Do not reuse an old state file blindly in a different subscription. Review the target environment and establish the backend deliberately.
+Do not reuse old state blindly in a new subscription. Review the target environment and establish the backend deliberately.
 
 ## Learning objectives
 
@@ -264,4 +282,4 @@ This project demonstrates hands-on work with:
 - Key Vault, Managed Identity, and service-level access controls
 - Azure Service Bus and queue-scoped RBAC
 - GitHub Actions CI and infrastructure change review
-- Security documentation, technical evidence, and cost-aware lab design
+- Security documentation and technical evidence
