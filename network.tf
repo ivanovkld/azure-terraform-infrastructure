@@ -12,7 +12,7 @@ resource "azurerm_subnet" "workload" {
   resource_group_name             = azurerm_resource_group.demo.name
   virtual_network_name            = azurerm_virtual_network.demo.name
   address_prefixes                = ["10.20.1.0/24"]
-  default_outbound_access_enabled = false
+  default_outbound_access_enabled = true
 }
 
 resource "azurerm_subnet" "private_endpoints" {

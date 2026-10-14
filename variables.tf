@@ -15,3 +15,9 @@ variable "servicebus_namespace_name" {
   type        = string
   default     = "sb-tf-infra-c7c86f"
 }
+
+variable "enable_private_endpoint_test_vm" {
+  description = "Keep the private endpoint validation VM deployed while the lab subscription is active"
+  type        = bool
+  default     = true
+}
